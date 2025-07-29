@@ -10,6 +10,8 @@ FAISS vector store setup for RAG with industrial practices:
 import os
 import logging
 from typing import List
+from dotenv import load_dotenv
+
 
 import faiss 
 from langchain.vectorstores import FAISS
@@ -22,6 +24,8 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 # Configurations
 FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "faiss_index")
