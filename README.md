@@ -50,6 +50,7 @@ chatbot_using_rag/
 
 
 
+---
 
 ## **Environment Variables**
 
@@ -75,14 +76,40 @@ API_HOST=0.0.0.0
 API_PORT=8000
 LOG_LEVEL=INFO
 
-
-
 ---
 
-## **Setup Instructions**
 
+Setup Instructions
 
-### 1. Clone Repository
-```bash
-git clone <your_repo_url>
+1. Clone Repository :
+git clone https://github.com/amil122/chatbot-rag-faiss.git
 cd chatbot_using_rag
+
+2. Create Virtual Environment
+
+python -m venv venv
+source venv/bin/activate   # Linux/Mac
+venv\Scripts\activate      # Windows
+
+3. Install Dependencies
+pip install -r requirements.txt
+
+
+Building the Vector Store:
+
+Place your PDFs inside the data/ folder.
+Build FAISS index:
+    python src/vector_store/build_index.py
+This will create the FAISS index in vectorstore/faiss_index.
+
+
+Running the API :
+    uvicorn src.api.chat_endpoint:app --reload
+
+The API will be available at:
+
+    Swagger Docs: http://127.0.0.1:8000/docs
+    ReDoc: http://127.0.0.1:8000/redoc
+
+Frontend (Optional):
+    streamlit run frontend/app.py
