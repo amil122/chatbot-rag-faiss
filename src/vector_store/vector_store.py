@@ -12,10 +12,8 @@ import logging
 from typing import List
 from dotenv import load_dotenv
 
-
-import faiss 
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.schema import Document
 
 # Configure logging
@@ -36,7 +34,7 @@ INDEX_TYPE = os.getenv("INDEX_TYPE", "flat")  # flat, hnsw, ivf
 
 def _get_embeddings():
     """Initialize HuggingFace embeddings model."""
-    return HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    return HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL,cache_folder="./models")
 
 
 def _normalize_vectors(vectorstore: FAISS):
@@ -100,20 +98,3 @@ def get_retriever(vectorstore: FAISS, k: int = 7):
     Return retriever with top-k document retrieval.
     """
     return vectorstore.as_retriever(search_kwargs={"k": k})
-
-
-if __name__ == "__main__":
-    from loaders.document_loader import load_documents, split_documents
-
-    try:
-        docs = load_documents("data")
-        chunks = split_documents(docs)
-        create_faiss_index(chunks)
-
-        vs = load_faiss_index()
-        retriever = get_retriever(vs)
-        results = retriever.get_relevant_documents("What is this document about?")
-        logger.info(f"Retrieved {len(results)} chunks for test query.")
-
-    except Exception as e:
-        logger.error(f"FAISS workflow error: {e}")

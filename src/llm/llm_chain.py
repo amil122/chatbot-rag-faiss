@@ -13,11 +13,14 @@ from dotenv import load_dotenv
 
 
 from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
-from vectorstore.faiss_store import load_faiss_index, get_retriever
+from src.vector_store.vector_store import load_faiss_index, get_retriever
 from langchain.llms.base import LLM
 from openai import OpenAI
+from pydantic import PrivateAttr
+
 
 load_dotenv()
 
@@ -40,36 +43,38 @@ RETRIEVER_K = int(os.getenv("RETRIEVER_K", 7))
 _cached_retriever = None
 
 
+
+from pydantic import PrivateAttr
+from langchain.llms.base import LLM
+from openai import OpenAI
+
+
+
+from pydantic import Field, PrivateAttr
+from langchain.llms.base import LLM
+from openai import OpenAI
+
 class OpenRouterLLM(LLM):
-    """
-    Custom LangChain LLM wrapper for OpenRouter API.
-    Provides OpenAI-compatible interface but routes through OpenRouter endpoint.
-    """
+    model_name: str = Field(default=MODEL_NAME)  
+    _client: OpenAI = PrivateAttr()              
 
     def __init__(self, model_name: str = MODEL_NAME):
-        super().__init__()
+        super().__init__(model_name=model_name)
         if not OPENROUTER_API_KEY:
-            raise EnvironmentError("OPENROUTER_API_KEY not set in environment variables")
+            raise EnvironmentError("OPENROUTER_API_KEY not set")
 
-        self.client = OpenAI(
+        object.__setattr__(self, "_client", OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=OPENROUTER_API_KEY,
-        )
-        self.model_name = model_name
+        ))
 
     def _call(self, prompt: str, stop=None):
-        """
-        Send prompt to OpenRouter API and return response text.
-        """
         try:
-            logger.debug(f"Sending prompt to OpenRouter (len={len(prompt)} chars)")
-            response = self.client.chat.completions.create(
+            response = self._client.chat.completions.create(
                 model=self.model_name,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
             )
-            result = response.choices[0].message.content
-            logger.debug(f"Received response (len={len(result)} chars)")
-            return result
+            return response.choices[0].message.content
         except Exception as e:
             logger.error(f"OpenRouter API error: {e}")
             return "Error generating response."
@@ -81,6 +86,8 @@ class OpenRouterLLM(LLM):
     @property
     def _llm_type(self):
         return "openrouter"
+
+
 
 
 def _get_cached_retriever():
@@ -112,7 +119,7 @@ def build_rag_chain() -> Runnable:
     {context}
 
     Question:
-    {question}
+    {input}
 
     Answer:
     """
@@ -120,33 +127,59 @@ def build_rag_chain() -> Runnable:
 
     llm = OpenRouterLLM()
 
+    
+# Create LLM chain with prompt
+    doc_chain = create_stuff_documents_chain(
+        llm=llm,
+        prompt=prompt
+    )
+    
+    # Combine retriever + doc_chain
     rag_chain = create_retrieval_chain(
         retriever=retriever,
-        combine_docs_chain_kwargs={"prompt": prompt},
-        llm=llm
+        combine_docs_chain=doc_chain
     )
+    
     return rag_chain
 
 
-def generate_answer(query: str) -> str:
+def generate_answer(query: str) -> dict:
     """
     Generate answer for a query using RAG pipeline.
-    Includes basic input validation and structured logging.
+    Returns:
+        {
+            "answer": str,
+            "sources": List[str]
+        }
     """
     if not query or not query.strip():
         logger.warning("Empty query received")
-        return "Please provide a valid question."
+        return {"answer": "Please provide a valid question.", "sources": []}
 
     query = query.strip()
     logger.info(f"Generating answer for query (len={len(query)} chars)")
 
     try:
         rag_chain = build_rag_chain()
-        result = rag_chain.invoke({"question": query})
-        return result.get("answer", str(result))
+        result = rag_chain.invoke({"input": query})
+
+        # Extract answer
+        answer = result.get("answer", str(result))
+
+        # Extract sources from context documents
+        sources = []
+        context_docs = result.get("context", [])
+        for doc in context_docs:
+            source = doc.metadata.get("source")
+            if source and source not in sources:
+                sources.append(source)
+
+        return {"answer": answer, "sources": sources}
+
     except Exception as e:
         logger.error(f"Error generating answer: {e}")
-        return "Error generating answer."
+        return {"answer": "Error generating answer.", "sources": []}
+
 
 
 if __name__ == "__main__":
